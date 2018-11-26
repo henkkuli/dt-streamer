@@ -6,6 +6,8 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavdevice/avdevice.h>
+#include <libswscale/swscale.h>
 }
 
 constexpr size_t INPUT_BUFFER_SIZE = 4096;
@@ -179,6 +181,18 @@ public:
         format_context->pb = input->GetAvioContext();
 
         THROW_ON_AV_ERROR(avformat_open_input(&format_context, nullptr, input_format, nullptr));
+
+        THROW_ON_AV_ERROR(avformat_find_stream_info(format_context, nullptr));
+    }
+
+    FfmpegDemuxer(AVInputFormat* input_format, const std::string& filename) : input(nullptr) {
+        format_context = nullptr;//avformat_alloc_context();
+
+        AVDictionary* options = nullptr;
+        av_dict_set(&options, "video_size", "1920x1080", 0);
+        av_dict_set_int(&options, "framerate", 60, 0);
+
+        THROW_ON_AV_ERROR(avformat_open_input(&format_context, filename.c_str(), input_format, &options));
 
         THROW_ON_AV_ERROR(avformat_find_stream_info(format_context, nullptr));
     }
@@ -617,14 +631,18 @@ void handler(boost::asio::ip::tcp::socket target_socket, boost::asio::ip::tcp::s
     muxer->WriteHeaders();
 
     auto input = std::unique_ptr<FfmpegNetworkInput>(new FfmpegNetworkInput(std::move(source_socket)));
-    auto demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("mpegts"), std::move(input));
+    // auto demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("mpegts"), std::move(input));
+    auto demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("x11grab"), ":0.0");
     // auto decoder = std::unique_ptr<FfmpegVideoDecoder>(new FfmpegVideoDecoder("libx264", demuxer));
-    
+
+    SwsContext* scaling_context = sws_getContext(1920, 1080, AV_PIX_FMT_BGR0, 1920, 1080, AV_PIX_FMT_YUV420P, 0, nullptr, nullptr, nullptr);
+    if (!scaling_context) THROW_FFMPEG("Failed to create scaling context");
+
     int i = 0;
     auto decoder = demuxer->FindVideoStream();
     decoder->OnFrame([&](AVFrame* frame) {
         AVFrame* target_frame = encoder->GetNextFrame();
-        av_frame_copy(target_frame, frame);
+        sws_scale(scaling_context, frame->data, frame->linesize, 0, frame->height, target_frame->data, target_frame->linesize);
         std::cout << frame->width << "x" << frame->height << " -> " << target_frame->width << "x" << target_frame->height << " " << i << std::endl;
         // int w = std::min(target_frame->width, frame->width);
         // int h = std::min(target_frame->height, frame->height);
@@ -652,6 +670,7 @@ void handler(boost::asio::ip::tcp::socket target_socket, boost::asio::ip::tcp::s
 }
 
 int main() {
+    avdevice_register_all();
 
     boost::asio::io_service io_service;
     boost::asio::ip::tcp::acceptor acceptor(io_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 5000));
