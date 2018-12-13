@@ -17,7 +17,7 @@ public:
                                                              std::shared_ptr<FfmpegMuxer> muxer,
                                                              int width, int height, int64_t bit_rate = 10e6) {
         std::unique_ptr<FfmpegVideoEncoder> encoder(new FfmpegVideoEncoder(codec_name, muxer, width, height, bit_rate));
-        return std::move(encoder);
+        return encoder;
     }
     
     ~FfmpegVideoEncoder() {
@@ -78,6 +78,7 @@ private:
         context->gop_size = 10;
         context->max_b_frames = 1;
         context->pix_fmt = AV_PIX_FMT_YUV420P;
+        context->thread_count = 1;
 
         THROW_ON_AV_ERROR(avcodec_open2(context, codec, nullptr));
 

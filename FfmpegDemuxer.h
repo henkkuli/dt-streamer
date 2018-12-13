@@ -50,6 +50,23 @@ public:
         Runner();
     }
 
+    void DemuxNextFrame() {
+        AVPacket* packet = av_packet_alloc();
+        if (!packet) THROW_FFMPEG("Failed to allocate packet");
+        int error_number = av_read_frame(format_context, packet);
+        if (error_number == AVERROR(EAGAIN) || error_number == AVERROR_EOF) {
+            av_packet_free(&packet);
+            return;
+        }
+        THROW_ON_AV_ERROR(error_number);
+
+        if (packet->size && packet->stream_index == video_decoder->GetStreamIndex()) {
+            video_decoder->SendPacket(packet);
+        } else {
+            av_packet_unref(packet);
+        }
+    }
+
 private:
     void Runner() {
         AVPacket* packet = av_packet_alloc();

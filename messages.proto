@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+message ClientControl {
+  message StartStream {
+    string foo = 1;
+  }
+  message StopStream {
+    string foo = 1;
+  }
+  oneof command {
+    StartStream start_stream = 1;
+    StopStream stop_stream = 2;
+  }
+}
+
+message ClientData {
+  bytes payload = 1;
+}
