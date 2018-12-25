@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+message ListSourcesRequest {
+}
+message ListSourcesResponse {
+    message Source {
+        string name = 1;
+    }
+    repeated Source sources = 1;
+}
+
+service Control {
+    
+    rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse) {}
+}

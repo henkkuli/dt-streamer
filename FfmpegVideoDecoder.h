@@ -15,10 +15,9 @@ public:
         codec = avcodec_find_decoder(stream->codecpar->codec_id);
         if (!codec) THROW_FFMPEG("Codec " + std::to_string(stream->codecpar->codec_id) + " not found");
         
-        // AVPacket* packet = av_packet_alloc();
-
         context = avcodec_alloc_context3(codec);
         if (!context) THROW_FFMPEG("Context not found");
+        context->thread_count = 1;
         THROW_ON_AV_ERROR(avcodec_parameters_to_context(context, stream->codecpar));
         THROW_ON_AV_ERROR(avcodec_open2(context, codec, nullptr));
 
@@ -27,12 +26,13 @@ public:
 
     void SendPacket(AVPacket* packet) {
         int ret = avcodec_send_packet(context, packet);
-        if (ret < 0) THROW_FFMPEG("Failed to send packet");
+        THROW_ON_AV_ERROR(ret);
 
         while (ret >= 0) {
             ret = avcodec_receive_frame(context, frame);
             // TODO: Correct error handling
             if (ret == AVERROR(EAGAIN)) break;
+            THROW_ON_AV_ERROR(ret);
 
             if (on_frame) on_frame(frame);
         }

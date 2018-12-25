@@ -19,8 +19,6 @@ public:
         format_context->pb = input->GetAvioContext();
 
         THROW_ON_AV_ERROR(avformat_open_input(&format_context, nullptr, input_format, nullptr));
-
-        THROW_ON_AV_ERROR(avformat_find_stream_info(format_context, nullptr));
     }
 
     FfmpegDemuxer(AVInputFormat* input_format, const std::string& filename) : input(nullptr) {
@@ -31,11 +29,13 @@ public:
         av_dict_set_int(&options, "framerate", 60, 0);
 
         THROW_ON_AV_ERROR(avformat_open_input(&format_context, filename.c_str(), input_format, &options));
-
-        THROW_ON_AV_ERROR(avformat_find_stream_info(format_context, nullptr));
     }
 
     FfmpegVideoDecoder* FindVideoStream() {
+        if (!format_info_decoded) {
+            int error_number = avformat_find_stream_info(format_context, nullptr);
+            if (error_number < 0) return nullptr;       // TODO: Check for error message types
+        }
         for (unsigned int i = 0; i < format_context->nb_streams; i++) {
             AVStream* stream = format_context->streams[i];
             if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
@@ -44,10 +44,6 @@ public:
         }
 
         return nullptr;
-    }
-
-    void StartDemuxing() {
-        Runner();
     }
 
     void DemuxNextFrame() {
@@ -68,25 +64,9 @@ public:
     }
 
 private:
-    void Runner() {
-        AVPacket* packet = av_packet_alloc();
-        if (!packet) THROW_FFMPEG("Failed to allocate packet");
-        while (true) {
-            int error_number = av_read_frame(format_context, packet);
-            if (error_number == AVERROR(EAGAIN) || error_number == AVERROR_EOF) break;
-            THROW_ON_AV_ERROR(error_number);
-
-            // TODO: Detect the correct stream
-            if (packet->size && packet->stream_index == video_decoder->GetStreamIndex()) {
-                video_decoder->SendPacket(packet);
-            } else {
-                av_packet_unref(packet);
-            }
-        }
-    }
 
     AVFormatContext* format_context;
     std::unique_ptr<FfmpegInput> input;
     FfmpegVideoDecoder* video_decoder;
-    std::thread thread;
+    bool format_info_decoded = false;
 };

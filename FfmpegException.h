@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "Logger.h"
+
 class FfmpegException : public std::exception {
 public:
     FfmpegException(const std::string& _message) : message(_message) {}
@@ -19,7 +21,11 @@ private:
 constexpr size_t ERROR_BUFFER_SIZE = 1024;
 #define STRINGIFY(x) #x
 #define TO_STRING(x) STRINGIFY(x)
-#define THROW_FFMPEG(message) throw FfmpegException(std::string(__FILE__ ":" TO_STRING(__LINE__) ": ") + message)
+#define THROW_FFMPEG(message) do { \
+    tlog << "Ffmpeg error: " << message; \
+    throw FfmpegException(std::string(__FILE__ ":" TO_STRING(__LINE__) ": ") + message); \
+} while(0)
+
 #define THROW_ON_AV_ERROR(expr) do { \
     int error_number_##__LINE__ = expr; \
     if (error_number_##__LINE__  < 0) { \
