@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
     try {
         address = argv[1];
         int port_int = std::stoi(argv[2]);
-        if (port_int < 0 || port_int > 65535) throw std::out_of_range("Port out of range");
+        if (port_int < 1 || port_int > 65535) throw std::out_of_range("Port out of range");
         port = port_int;
     } catch (std::invalid_argument& e) {
         usage(argv[0]);

@@ -9,7 +9,21 @@ message ListSourcesResponse {
     repeated Source sources = 1;
 }
 
+message ConnectSourceToSinkRequest {
+    uint32 source = 1;
+    uint32 sink = 2;
+}
+message ConnectSourceToSinkResponse {
+}
+
+message DetachSinkRequest {
+    uint32 sink = 1;
+}
+message DetachSinkResponse {
+}
+
 service Control {
-    
     rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse) {}
+    rpc ConnectSourceToSink(ConnectSourceToSinkRequest) returns (ConnectSourceToSinkResponse) {}
+    rpc DetachSink(DetachSinkRequest) returns (DetachSinkResponse) {}
 }
