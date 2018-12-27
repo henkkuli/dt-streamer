@@ -268,6 +268,7 @@ void Source::DetachFrom(Sink* sink) {
     for (auto it = target_sinks.begin(); it != target_sinks.end(); it++) {
         if (it->get() == sink) {
             target_sinks.erase(it);
+            if (target_sinks.empty()) StopStream();
             return;
         }
     }
@@ -320,11 +321,15 @@ private:
     void AcceptConnection(const boost::system::error_code& ec, boost::asio::ip::tcp::socket socket) {
         if (ec) {
             tlog << "Error accepting a connection: " << ec.message();
+            // Try still again
+            StartAccepting();
             return;
         }
         tlog << "Connection accepted";
         auto source = std::make_shared<Source>(io_service, std::move(socket));
         sources.push_back(source);
+        // Accept more
+        StartAccepting();
     }
 };
 
