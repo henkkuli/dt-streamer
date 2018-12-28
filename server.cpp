@@ -112,10 +112,11 @@ class Sink;
 
 class Source {
 public:
-    Source(std::shared_ptr<boost::asio::io_service> _io_service, boost::asio::ip::tcp::socket _socket) :
+    Source(std::shared_ptr<boost::asio::io_service> _io_service, boost::asio::ip::tcp::socket _socket, uint32_t _id) :
            io_service(_io_service),
            work(*io_service),
            address(_socket.remote_endpoint().address().to_string()),
+           id(_id),
            stream(std::move(_socket), boost::bind(&Source::HandleMessage, this, boost::placeholders::_1)) {
         async_input = std::make_unique<AsyncInput>(io_service);
         demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("mpegts"), async_input->GetAsyncInput());
@@ -142,21 +143,27 @@ public:
 
     void DetachFrom(Sink* sink);
 
-    std::string Name() {
+    std::string Name() const {
         // TODO: Find a real name instead of address
         return address;
+    }
+
+    uint32_t Id() const {
+        return id;
     }
 
 private:
     std::shared_ptr<boost::asio::io_service> io_service;
     boost::asio::io_service::work work;
-    std::string address;
+    const std::string address;
+    const uint32_t id;
+    const uint32_t reserved[7] = {0};       // TODO: Find out why this is needed
     ProtobufStream<ClientData, ClientControl> stream;
     std::unique_ptr<AsyncInput> async_input;
     std::shared_ptr<FfmpegDemuxer> demuxer;
     std::unique_ptr<FfmpegVideoDecoder> decoder;
-    std::set<std::shared_ptr<Sink>> target_sinks;
     std::mutex target_sinks_mutex;
+    std::set<std::shared_ptr<Sink>> target_sinks;
 
     void HandleMessage(const ClientData& message) {
         async_input->SendData(message.payload());
@@ -188,7 +195,8 @@ private:
 
 class Sink {
 public:
-    Sink(boost::asio::io_service& io_service, const std::string& address, uint16_t port) {
+    Sink(boost::asio::io_service& io_service, const std::string& address, uint16_t port, uint32_t _id) :
+         id(_id) {
         boost::asio::ip::tcp::resolver resolver(io_service);
         auto endpoints = resolver.resolve(address, std::to_string(port));
         // boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(address), port);
@@ -240,7 +248,12 @@ public:
         encoder->WriteFrame();
     }
 
+    uint32_t Id() const {
+        return id;
+    }
+
 private:
+    const uint32_t id;
     std::shared_ptr<FfmpegMuxer> muxer;
     std::unique_ptr<FfmpegVideoEncoder> encoder;
     Source* source = nullptr;
@@ -286,36 +299,50 @@ public:
                                         std::placeholders::_1, std::placeholders::_2));;
     }
 
-    void ConnectSourceToSink(size_t source, size_t sink) {
-        if (source >= sources.size()) {
+    void ConnectSourceToSink(uint32_t source_id, uint32_t sink_id) {
+        std::scoped_lock lock(sinks_mutex, sources_mutex);
+        auto source = sources.find(source_id);
+        auto sink = sinks.find(sink_id);
+        if (source == sources.end()) {
             throw std::invalid_argument("source");
         }
-        if (sink >= sinks.size()) {
+        if (sink == sinks.end()) {
             throw std::invalid_argument("sink");
         }
-        sinks[sink]->DetachFromSource();
-        sources[source]->ConnectTo(sinks[sink]);
+        sink->second->DetachFromSource();
+        source->second->ConnectTo(sink->second);
     }
 
     std::vector<std::shared_ptr<Source>> ListSources() const {
-        return sources;
+        std::scoped_lock lock(sources_mutex);
+        std::vector<std::shared_ptr<Source>> res;
+        for (auto& source : sources) res.push_back(source.second);
+        return res;
     }
 
-    void AddSink(std::shared_ptr<Sink> sink) {
-        sinks.push_back(sink);
+    void AddSink(const std::string& address, uint16_t port) {
+        std::scoped_lock lock(sinks_mutex);
+        auto sink = std::make_shared<Sink>(*io_service, address, port, next_sink_id++);
+        sinks[sink->Id()] = std::move(sink);
     }
 
-    void DetachSink(size_t sink) {
-        if (sink >= sinks.size()) {
+    void DetachSink(uint32_t sink_id) {
+        std::scoped_lock lock(sinks_mutex);
+        auto sink = sinks.find(sink_id);
+        if (sink == sinks.end()) {
             throw std::invalid_argument("sink");
         }
-        sinks[sink]->DetachFromSource();
+        sink->second->DetachFromSource();
     }
 
 private:
     std::shared_ptr<boost::asio::io_service> io_service;
-    std::vector<std::shared_ptr<Sink>> sinks;
-    std::vector<std::shared_ptr<Source>> sources;
+    mutable std::mutex sinks_mutex;
+    std::map<uint32_t, std::shared_ptr<Sink>> sinks;
+    uint32_t next_sink_id = 1;
+    mutable std::mutex sources_mutex;
+    std::map<uint32_t, std::shared_ptr<Source>> sources;
+    uint32_t next_source_id = 1;
     boost::asio::ip::tcp::acceptor acceptor;
 
     void AcceptConnection(const boost::system::error_code& ec, boost::asio::ip::tcp::socket socket) {
@@ -326,8 +353,10 @@ private:
             return;
         }
         tlog << "Connection accepted";
-        auto source = std::make_shared<Source>(io_service, std::move(socket));
-        sources.push_back(source);
+        std::scoped_lock lock(sources_mutex);
+        auto source = std::make_shared<Source>(io_service, std::move(socket), next_source_id++);
+        sources[source->Id()] = std::move(source);
+
         // Accept more
         StartAccepting();
     }
@@ -426,7 +455,7 @@ int main(int argc, char** argv) {
     // av_log_set_callback(nullptr);
 
     for (auto target : target_addresses) {
-        router->AddSink(std::make_shared<Sink>(*io_service, target.first, target.second));
+        router->AddSink(target.first, target.second);
     }
 
     // Start the control server
