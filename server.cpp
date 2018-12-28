@@ -126,17 +126,21 @@ public:
     }
 
     void StartStream() {
-        tlog << "Starting";
-        ClientControl message;
-        message.mutable_start_stream();
-        stream.WriteMessage(message);
+        io_service->dispatch([&]() {
+            tlog << "Starting";
+            ClientControl message;
+            message.mutable_start_stream();
+            stream.WriteMessage(message);
+        });
     }
 
     void StopStream() {
-        tlog << "Stopping";
-        ClientControl message;
-        message.mutable_stop_stream();
-        stream.WriteMessage(message);
+        io_service->dispatch([&]() {
+            tlog << "Stopping";
+            ClientControl message;
+            message.mutable_stop_stream();
+            stream.WriteMessage(message);
+        });
     }
 
     void ConnectTo(std::shared_ptr<Sink> sink);
@@ -196,7 +200,8 @@ private:
 class Sink {
 public:
     Sink(boost::asio::io_service& io_service, const std::string& address, uint16_t port, uint32_t _id) :
-         id(_id) {
+         id(_id),
+         name(address + ":" + std::to_string(port)) {
         boost::asio::ip::tcp::resolver resolver(io_service);
         auto endpoints = resolver.resolve(address, std::to_string(port));
         // boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(address), port);
@@ -240,7 +245,7 @@ public:
     void SendFrame(AVFrame* frame) {
         // TODO: Scaling
         AVFrame* target = encoder->GetNextFrame();
-        av_frame_copy(target, frame);
+        THROW_ON_AV_ERROR(av_frame_copy(target, frame));
         target->pts = frame_number++;
         tlog << target->width << "x" << target->height << " "
              << frame->width << "x" << frame->height;
@@ -248,12 +253,21 @@ public:
         encoder->WriteFrame();
     }
 
+    std::string Name() const {
+        return name;
+    }
+
     uint32_t Id() const {
         return id;
     }
 
+    Source* GetSource() const {
+        return source;
+    }
+
 private:
     const uint32_t id;
+    const std::string name;
     std::shared_ptr<FfmpegMuxer> muxer;
     std::unique_ptr<FfmpegVideoEncoder> encoder;
     Source* source = nullptr;
@@ -316,7 +330,14 @@ public:
     std::vector<std::shared_ptr<Source>> ListSources() const {
         std::scoped_lock lock(sources_mutex);
         std::vector<std::shared_ptr<Source>> res;
-        for (auto& source : sources) res.push_back(source.second);
+        for (auto source : sources) res.push_back(source.second);
+        return res;
+    }
+
+    std::vector<std::shared_ptr<Sink>> ListSinks() const {
+        std::scoped_lock lock(sinks_mutex);
+        std::vector<std::shared_ptr<Sink>> res;
+        for (auto sink : sinks) res.push_back(sink.second);
         return res;
     }
 
@@ -371,7 +392,24 @@ public:
                              ListSourcesResponse* response) override {
         tlog << "Listing sources";
         for (auto source : router->ListSources()) {
-            response->add_sources()->set_name(source->Name());
+            auto source_proto = response->add_sources();
+            source_proto->set_id(source->Id());
+            source_proto->set_name(source->Name());
+        }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status ListSinks(grpc::ServerContext* context, const ListSinksRequest* request,
+                             ListSinksResponse* response) override {
+        tlog << "Listing sinks";
+        for (auto sink : router->ListSinks()) {
+            auto sink_proto = response->add_sinks();
+            sink_proto->set_id(sink->Id());
+            sink_proto->set_name(sink->Name());
+            auto source = sink->GetSource();
+            if (source) {
+                sink_proto->set_source(source->Id());
+            }
         }
         return grpc::Status::OK;
     }

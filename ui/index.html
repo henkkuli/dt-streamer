@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+    <head>
+        <title>dt-streamer control panel</title>
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+window.onload = function() {
+    const socket = io.connect('///');
+
+    socket.on('update', function({sources, sinks}) {
+        const matrix = document.getElementById('matrix');
+        const head = matrix.getElementsByTagName('thead')[0];
+        const body = matrix.getElementsByTagName('tbody')[0];
+
+        const sinks_to_sources = new Map();
+        for (let sink of sinks) {
+            sinks_to_sources.set(sink.id, sink.source);
+        }
+
+        while (head.firstChild) head.removeChild(head.firstChild);
+        while (body.firstChild) body.removeChild(body.firstChild);
+
+        let row = document.createElement('tr');
+        head.appendChild(row);
+        let header = document.createElement('th');
+        row.appendChild(header);
+        for (let sink of sinks) {
+            header = document.createElement('th');
+            header.textContent = sink.name;
+            row.appendChild(header);
+        }
+
+        for (let source of sources) {
+            row = document.createElement('tr');
+            body.appendChild(row);
+            let column = document.createElement('td');
+            row.appendChild(column);
+            column.append(source.name);
+
+            for (let sink of sinks) {
+                column = document.createElement('td');
+                row.appendChild(column);
+                let button = document.createElement('button');
+                column.appendChild(button);
+                button.textContent = 'Connect';
+
+                if (sinks_to_sources.get(sink.id) === source.id) {
+                    button.classList.add('connected');
+                    button.textContent = 'Connected';
+                }
+
+                button.addEventListener('click', function() {
+                    socket.emit('route', {source: source.id, sink: sink.id});
+                });
+            }
+        }
+    });
+
+    function requestUpdate() {
+        socket.emit('requestUpdate');
+        setTimeout(requestUpdate, 1000);
+    }
+    requestUpdate();
+}
+        </script>
+        <style>
+.connected {
+    background-color: red;
+}
+        </style>
+    </head>
+    <body>
+        <table id="matrix">
+            <thead>
+
+            </thead>
+            <tbody>
+
+            </tbody>
+        </table>
+    </body>
+</html>
