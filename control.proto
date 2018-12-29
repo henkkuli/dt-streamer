@@ -4,9 +4,21 @@ message ListSourcesRequest {
 }
 message ListSourcesResponse {
     message Source {
-        string name = 1;
+        uint32 id = 1;
+        string name = 2;
     }
     repeated Source sources = 1;
+}
+
+message ListSinksRequest {
+}
+message ListSinksResponse {
+    message Sink {
+        uint32 id = 1;
+        string name = 2;
+        uint32 source = 3;
+    }
+    repeated Sink sinks = 1;
 }
 
 message ConnectSourceToSinkRequest {
@@ -24,6 +36,7 @@ message DetachSinkResponse {
 
 service Control {
     rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse) {}
+    rpc ListSinks(ListSinksRequest) returns (ListSinksResponse) {}
     rpc ConnectSourceToSink(ConnectSourceToSinkRequest) returns (ConnectSourceToSinkResponse) {}
     rpc DetachSink(DetachSinkRequest) returns (DetachSinkResponse) {}
 }
