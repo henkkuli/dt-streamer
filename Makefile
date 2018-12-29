@@ -2,7 +2,7 @@ CC=g++
 CCFLAGS=-std=c++17 -Wall -Wextra -Wshadow -Werror -Wno-unused-parameter -Wno-unused-variable \
 		-Wno-unused-but-set-variable -g $(CFLAGS_EXTRA)
 LDFLAGS=-lavformat -lavcodec -lavutil -lavdevice -lswscale -lpthread -lboost_system -lboost_coroutine -lprotobuf \
-		`pkg-config --libs protobuf grpc++`
+		`pkg-config --libs protobuf grpc++` -lboost_program_options
 
 PROTOC=protoc
 PROTOFLAGS=-I./ --cpp_out=./ --grpc_out=./ --plugin=protoc-gen-grpc=`which grpc_cpp_plugin`

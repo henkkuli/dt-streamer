@@ -10,6 +10,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/bind.hpp>
+#include <boost/program_options.hpp>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/server_builder.h>
 #include <google/protobuf/message.h>
@@ -24,6 +25,8 @@
 #include "FfmpegVideoEncoder.h"
 #include "ProtobufStream.h"
 #include "Logger.h"
+
+namespace po = boost::program_options;
 
 class AsyncInput;
 
@@ -440,50 +443,64 @@ void WorkerThread(std::shared_ptr<boost::asio::io_service> io_service) {
     }
 }
 
-void usage(const char* program) {
-    std::cerr << program << " control_port data_port (address port)*\n"
-              << "    control_port  port being listened for control trafic (1 - 65535)\n"
-              << "    data_port     port for clients to connect to (1 - 65535)\n"
-              << "    address       addresses of targets\n"
-              << "    port          ports of targets\n";
+void checkPort(uint16_t port) {
+    if (port < 1)
+        throw std::invalid_argument("port");
+}
+
+struct AddressPortPair {
+    std::string address;
+    uint16_t port;
+};
+
+std::istream& operator>>(std::istream& stream, AddressPortPair& result) {
+    std::string address;
+    stream >> address;
+    
+    auto separator = address.find_last_of(':');
+    if (separator == std::string::npos) throw std::invalid_argument("missing port");
+    
+    std::string port_str = address.substr(separator+1);
+    int port = std::stoi(port_str);
+    if (port < 1 || port > 65535) throw std::invalid_argument("port");
+
+    address = address.substr(0, separator);
+
+    result.address = address;
+    result.port = port;
+    
+    return stream;
 }
 
 int main(int argc, char** argv) {
-    uint16_t control_port, data_port;
-    std::vector<std::pair<std::string, uint16_t>> target_addresses;
-    if (argc < 5) {
-        usage(argv[0]);
+    po::options_description description("dt-streamer server");
+    po::positional_options_description positional_description;
+    description.add_options()
+        ("help", "Show this help")
+        ("threads", po::value<unsigned>()->default_value(1), "Number of threads for IO, excluding RPC")
+        ("control-port", po::value<uint16_t>()->notifier(&checkPort)->default_value(6000), "Port for RPC connection")
+        ("data-port", po::value<uint16_t>()->notifier(&checkPort)->default_value(5000), "Port for streaming clients")
+        ("sink", po::value<std::vector<AddressPortPair>>(), "Address of a sink")
+    ;
+    positional_description.add("sink", -1);
+
+    po::variables_map args;
+    po::store(po::command_line_parser(argc, argv)
+              .options(description)
+              .positional(positional_description)
+              .run(),
+              args);
+    po::notify(args);
+
+    if (args.count("help") || !args.count("sink")) {
+        std::cout << description << std::endl;
         return 1;
     }
-    try {
-        int control_port_int = std::stoi(argv[1]);
-        int data_port_int = std::stoi(argv[2]);
 
-        if (control_port_int < 1 || control_port_int > 65535) throw std::out_of_range("Control port out of range");
-        if (data_port_int < 1 || data_port_int > 65535) throw std::out_of_range("Data port out of range");
-
-        control_port = control_port_int;
-        data_port = data_port_int;
-
-        char** arg = argv + 3;
-        argc -= 3;
-        if (argc % 2 != 0) throw std::out_of_range("Wrong number of arguments");
-        for (int i = 0; i < argc; i += 2) {
-            int port = std::stoi(arg[i+1]);
-            if (port < 1 || port > 65535) throw std::out_of_range("Target port out of range");
-
-            target_addresses.push_back({
-                arg[i],
-                port
-            });
-        }
-    } catch (std::invalid_argument& e) {
-        usage(argv[0]);
-        return 1;
-    } catch (std::out_of_range& e) {
-        usage(argv[0]);
-        return 1;
-    }
+    unsigned threads = args["threads"].as<unsigned>();
+    uint16_t control_port = args["control-port"].as<uint16_t>();
+    uint16_t data_port = args["data-port"].as<uint16_t>();
+    std::vector<AddressPortPair> target_addresses = args["sink"].as<std::vector<AddressPortPair>>();
 
     auto io_service = std::make_shared<boost::asio::io_service>();
     boost::asio::io_service::work work(*io_service);
@@ -493,7 +510,7 @@ int main(int argc, char** argv) {
     // av_log_set_callback(nullptr);
 
     for (auto target : target_addresses) {
-        router->AddSink(target.first, target.second);
+        router->AddSink(target.address, target.port);
     }
 
     // Start the control server
@@ -508,7 +525,7 @@ int main(int argc, char** argv) {
     // Let's launch io_service workers in a separate thread(s). For some reason grpc server and io_service can't be run
     // from the same thread. Thus don't run io_service->run() from the main thread.
     std::vector<std::thread> worker_threads;
-    for (int i = 0; i < 1; i++) {
+    for (unsigned i = 0; i < threads; i++) {
         worker_threads.emplace_back(
             boost::bind(
                 &WorkerThread, io_service
