@@ -1,6 +1,7 @@
-dt-streamer
 client
 server
 .vscode
 *.pb.cc
 *.pb.h
+*.d
+*.o
