@@ -32,6 +32,7 @@ CLIENT_PROTO_C = $(filter %.pb.cc,$(CLIENT_SRC:%.proto=%.pb.cc) $(CLIENT_SRC:%.p
 
 # Make all c++ files depend on the proto files, especially the headers
 $(filter %.cpp,$(SERVER_SRC)): $(SERVER_PROTO_C:%.cc=%.h)
+$(filter %.cpp,$(CLIENT_SRC)): $(CLIENT_PROTO_C:%.cc=%.h)
 
 # Generate list of object files
 SERVER_OBJS = $(filter %.o,$(SERVER_SRC:%.cpp=%.o)) $(SERVER_PROTO_C:%.cc=%.o)
