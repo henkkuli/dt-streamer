@@ -5,8 +5,10 @@
 template<typename InputMessage, typename OutputMessage>
 class ProtobufStream {
 public:
-    ProtobufStream(boost::asio::ip::tcp::socket&& _socket, std::function<void(const InputMessage&)> _message_handler) :
-                   socket(std::move(_socket)), message_handler(_message_handler) {
+    ProtobufStream(boost::asio::ip::tcp::socket&& _socket, std::function<void(const InputMessage&)> _message_handler,
+                   std::function<void()> _on_close) :
+                   socket(std::move(_socket)), message_handler(_message_handler),
+                   on_close(_on_close) {
         // Begin reading messages
         ReadMessage();
     }
@@ -21,7 +23,14 @@ public:
         uint32_t size = htonl(message_size);
         std::memcpy(write_buffer.data(), &size, 4);
 
-        boost::asio::write(socket, boost::asio::buffer(write_buffer, message_size + 4));
+        boost::system::error_code ec;
+        boost::asio::write(socket, boost::asio::buffer(write_buffer, message_size + 4), ec);
+
+        if (ec) {
+            tlog << "Writing message failed";
+            socket.close();
+            on_close();
+        }
     }
 
 private:
@@ -30,6 +39,7 @@ private:
     std::vector<char> read_buffer;
     boost::asio::ip::tcp::socket socket;
     std::function<void(const InputMessage&)> message_handler;
+    std::function<void()> on_close;
     
     void AsyncRead(size_t size, const std::function<void(const boost::system::error_code&, std::size_t)>& handler) {
         std::scoped_lock lock(socket_mutex);
@@ -47,7 +57,9 @@ private:
         if (ec) {
             // TODO: Something failed, we should probably do something
             tlog << "Failed to read message length";
-            exit(2);
+            socket.close();
+            on_close();
+            return;
         }
 
         uint32_t length;
@@ -64,7 +76,9 @@ private:
         if (ec) {
             // TODO: Something failed, we should probably do something
             tlog << "Failed to read message";
-            exit(2);
+            socket.close();
+            on_close();
+            return;;
         }
 
         InputMessage message;

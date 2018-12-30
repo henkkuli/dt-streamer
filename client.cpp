@@ -73,7 +73,8 @@ public:
                io_service(_io_service),
                work(*io_service),
                stream(connect_socket(io_service, address, port), boost::bind(&Connection::HandleMessage, this,
-                                                                             boost::placeholders::_1)) {
+                                                                             boost::placeholders::_1),
+                      []() { /* TODO: Do something on close */ exit(2); }) {
         // Create video output
         auto output = std::make_unique<ProtobufOutput>(&stream);
         auto muxer = std::make_shared<FfmpegMuxer>(av_guess_format("mpegts", nullptr, nullptr), std::move(output), 30);

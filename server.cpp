@@ -1,5 +1,6 @@
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING
 
+#include <atomic>
 #include <vector>
 #include <iostream>
 #include <thread>
@@ -44,7 +45,7 @@ private:
 class AsyncInput {
 public:
     AsyncInput(std::shared_ptr<boost::asio::io_service> _io_service, size_t buffer_size = 4096) : io_service(_io_service) {
-        buffer = (uint8_t*) av_malloc(buffer_size);
+        uint8_t* buffer = (uint8_t*) av_malloc(buffer_size);
         avio_context = avio_alloc_context(
             buffer,
             buffer_size,
@@ -57,8 +58,8 @@ public:
     }
 
     virtual ~AsyncInput() {
+        av_free(avio_context->buffer);
         avio_context_free(&avio_context);
-        av_free(buffer);
         // TODO: Ensure thread safety
     }
 
@@ -75,6 +76,10 @@ public:
         yield = _yield;
     }
 
+    void Suspend() {
+        suspended = true;
+    }
+
 private:
     static int ReadData(void* opaque, uint8_t* buffer, int buffer_size) {
         // TODO: Lock for yield
@@ -82,7 +87,7 @@ private:
         if (!input.yield) return 0;
 
         // Loop until all data has been received
-        while (true) {
+        while (!input.suspended) {
             {
                 std::scoped_lock lock(input.async_buffer_mutex);
                 if (input.async_buffer.size() >= size_t(buffer_size)) {
@@ -94,15 +99,17 @@ private:
             }
             input.io_service->post(*input.yield);
         }
+
+        // The execution has been suspended
+        return AVERROR_EOF;
     }
 
     std::shared_ptr<boost::asio::io_service> io_service;
     boost::asio::yield_context* yield = nullptr;
-    uint8_t* buffer;
-    std::thread thread;
     std::deque<char> async_buffer;
     std::mutex async_buffer_mutex;
     AVIOContext* avio_context;
+    std::atomic<bool> suspended = false;
 
     friend class AsyncInputInternal;
 };
@@ -113,19 +120,30 @@ AVIOContext* AsyncInputInternal::GetAvioContext() {
 
 class Sink;
 
-class Source {
+class Source : public std::enable_shared_from_this<Source> {
 public:
-    Source(std::shared_ptr<boost::asio::io_service> _io_service, boost::asio::ip::tcp::socket _socket, uint32_t _id) :
+    Source(std::shared_ptr<boost::asio::io_service> _io_service, boost::asio::ip::tcp::socket _socket, uint32_t _id,
+           std::function<void()> on_close) :
            io_service(_io_service),
            work(*io_service),
            address(_socket.remote_endpoint().address().to_string()),
            id(_id),
-           stream(std::move(_socket), boost::bind(&Source::HandleMessage, this, boost::placeholders::_1)) {
+           stream(std::move(_socket), boost::bind(&Source::HandleMessage, this, boost::placeholders::_1), on_close) {
         async_input = std::make_unique<AsyncInput>(io_service);
         demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("mpegts"), async_input->GetAsyncInput());
 
         // Start decoding in a coroutine
-        boost::asio::spawn(*io_service, boost::bind(&Source::DecodeAll, this, boost::placeholders::_1));
+        io_service->post([&]() {
+            boost::asio::spawn(*io_service,
+                               boost::bind(&Source::DecodeAll,
+                                           shared_from_this(),
+                                           boost::placeholders::_1)
+                              );
+        });
+    }
+
+    ~Source() {
+        // Detaching from sinks is not required because they hold weak pointers
     }
 
     void StartStream() {
@@ -159,18 +177,25 @@ public:
         return id;
     }
 
+    void Suspend() {
+        suspended = true;
+        async_input->Suspend();
+        // TODO: Detach all sinks
+    }
+
 private:
     std::shared_ptr<boost::asio::io_service> io_service;
     boost::asio::io_service::work work;
     const std::string address;
     const uint32_t id;
-    const uint32_t reserved[7] = {0};       // TODO: Find out why this is needed
+    const uint32_t reserved[3] = {0};       // TODO: Find out why this is needed
     ProtobufStream<ClientData, ClientControl> stream;
     std::unique_ptr<AsyncInput> async_input;
     std::shared_ptr<FfmpegDemuxer> demuxer;
     std::unique_ptr<FfmpegVideoDecoder> decoder;
     std::mutex target_sinks_mutex;
     std::set<std::shared_ptr<Sink>> target_sinks;
+    std::atomic<bool> suspended = false;
 
     void HandleMessage(const ClientData& message) {
         async_input->SendData(message.payload());
@@ -187,14 +212,16 @@ private:
         }
     }
 
-    void DecodeAll(boost::asio::yield_context yield) {
+    static void DecodeAll(std::shared_ptr<Source> source, boost::asio::yield_context yield) {
+        tlog << "Starting decoding loop";
         // Async input needs a yielder before it can be used
-        async_input->SetYielder(&yield);
-        while (1) {
-            DecodeFrame();
+        source->async_input->SetYielder(&yield);
+        while (!source->suspended) {
+            source->DecodeFrame();
             // Yield after every group of frames for outher stuff
-            io_service->post(yield);
+            source->io_service->post(yield);
         }
+        tlog << "Stopping decoding loop";
     }
 
     void OnFrame(AVFrame* frame);
@@ -239,10 +266,10 @@ public:
     }
 
     void DetachFromSource() {
-        if (!source) return;
-        auto detached_source = source;
-        source = nullptr;
-        detached_source->DetachFrom(this);
+        if (auto detached_source = source.lock()) {
+            source.reset();
+            detached_source->DetachFrom(this);
+        }
     }
 
     void SendFrame(AVFrame* frame) {
@@ -264,7 +291,7 @@ public:
         return id;
     }
 
-    Source* GetSource() const {
+    std::weak_ptr<Source> GetSource() const {
         return source;
     }
 
@@ -273,7 +300,7 @@ private:
     const std::string name;
     std::shared_ptr<FfmpegMuxer> muxer;
     std::unique_ptr<FfmpegVideoEncoder> encoder;
-    Source* source = nullptr;
+    std::weak_ptr<Source> source;
     int64_t frame_number = 0;
 
     friend class Source;
@@ -289,7 +316,7 @@ void Source::OnFrame(AVFrame* frame) {
 void Source::ConnectTo(std::shared_ptr<Sink> sink) {
         std::scoped_lock lock(target_sinks_mutex);
         target_sinks.insert(sink);
-        sink->source = this;
+        sink->source = weak_from_this();
         StartStream();
     }
 
@@ -298,6 +325,7 @@ void Source::DetachFrom(Sink* sink) {
     for (auto it = target_sinks.begin(); it != target_sinks.end(); it++) {
         if (it->get() == sink) {
             target_sinks.erase(it);
+            sink->DetachFromSource();
             if (target_sinks.empty()) StopStream();
             return;
         }
@@ -377,8 +405,18 @@ private:
             return;
         }
         tlog << "Connection accepted";
+
         std::scoped_lock lock(sources_mutex);
-        auto source = std::make_shared<Source>(io_service, std::move(socket), next_source_id++);
+        uint32_t source_id = next_source_id++;
+        std::shared_ptr<Source> source = std::make_shared<Source>(io_service, std::move(socket), source_id,
+            /* on_close */ std::bind([this](uint32_t id) {
+                std::scoped_lock lock2(sources_mutex);
+                auto src = sources[id];
+                sources.erase(id);
+
+                // Suspend the thread to flush the decoder
+                src->Suspend();
+            }, source_id));
         sources[source->Id()] = std::move(source);
 
         // Accept more
@@ -409,8 +447,7 @@ public:
             auto sink_proto = response->add_sinks();
             sink_proto->set_id(sink->Id());
             sink_proto->set_name(sink->Name());
-            auto source = sink->GetSource();
-            if (source) {
+            if (auto source = sink->GetSource().lock()) {
                 sink_proto->set_source(source->Id());
             }
         }
