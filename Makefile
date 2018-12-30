@@ -18,7 +18,7 @@ SERVER_LIBS = -lgrpc++ -lboost_program_options
 CLIENT_LIBS =
 
 # List the compiled sources for each executable
-SERVER_SRC = server.cpp Logger.cpp control.proto messages.proto
+SERVER_SRC = server.cpp Logger.cpp AddressPortPair.cpp control.proto messages.proto
 CLIENT_SRC = client.cpp Logger.cpp messages.proto
 
 # Turn proto files into corresponding c++ files
