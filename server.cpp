@@ -27,6 +27,7 @@
 #include "FfmpegVideoEncoder.h"
 #include "ProtobufStream.h"
 #include "Logger.h"
+#include "Util.h"
 
 namespace po = boost::program_options;
 
@@ -230,34 +231,11 @@ private:
 
 class Sink {
 public:
-    Sink(boost::asio::io_service& io_service, const std::string& address, uint16_t port, uint32_t _id) :
+    Sink(std::shared_ptr<boost::asio::io_service> io_service, const std::string& address,
+         uint16_t port, uint32_t _id) :
          id(_id),
          name(address + ":" + std::to_string(port)) {
-        boost::asio::ip::tcp::resolver resolver(io_service);
-        auto endpoints = resolver.resolve(address, std::to_string(port));
-        // boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(address), port);
-        boost::asio::ip::tcp::socket socket(io_service);
-        // socket.connect(endpoint);
-        bool connected = false;
-        for (auto& endpoint : endpoints) {
-            tlog << "Connecting to " << endpoint.endpoint().address() << ":" << endpoint.endpoint().port();
-            boost::system::error_code ec;
-            socket.connect(endpoint.endpoint(), ec);
-            if (!ec) {
-                connected = true;
-                break;
-            } else {
-                tlog << ec.message();
-                // Reset the socket
-                socket = boost::asio::ip::tcp::socket{io_service};
-            }
-        }
-        if (!connected) {
-            tlog << "Failed to connect " << address << ":" << port;
-            // Crash the program...
-            // TODO: More elegant error handling
-            exit(2);
-        }
+        auto socket = connect_socket(io_service, address, port);
 
         muxer = std::make_shared<FfmpegMuxer>(av_guess_format("mpegts", nullptr, nullptr),
                                               std::make_unique<FfmpegNetworkOutput>(std::move(socket)),
@@ -375,7 +353,7 @@ public:
 
     void AddSink(const std::string& address, uint16_t port) {
         std::scoped_lock lock(sinks_mutex);
-        auto sink = std::make_shared<Sink>(*io_service, address, port, next_sink_id++);
+        auto sink = std::make_shared<Sink>(io_service, address, port, next_sink_id++);
         sinks[sink->Id()] = std::move(sink);
     }
 

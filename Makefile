@@ -11,15 +11,17 @@ PROTOC = protoc
 PROTOFLAGS = -I./ --cpp_out=./ --grpc_out=./ --plugin=protoc-gen-grpc=`which grpc_cpp_plugin`
 
 # Common linking options
+LDFLAGS =
 LDLIBS = -lavformat -lavcodec -lavutil -lavdevice -lswscale -lpthread -lboost_system -lboost_coroutine -lprotobuf
-		 
+LDLIBS += -lboost_program_options
+
 # Target specific linking options
-SERVER_LIBS = -lgrpc++ -lboost_program_options
+SERVER_LIBS = -lgrpc++
 CLIENT_LIBS =
 
 # List the compiled sources for each executable
-SERVER_SRC = server.cpp Logger.cpp AddressPortPair.cpp control.proto messages.proto
-CLIENT_SRC = client.cpp Logger.cpp messages.proto
+SERVER_SRC = server.cpp AddressPortPair.cpp Util.cpp Logger.cpp control.proto messages.proto
+CLIENT_SRC = client.cpp AddressPortPair.cpp Util.cpp Logger.cpp messages.proto
 
 # Turn proto files into corresponding c++ files
 SERVER_PROTO_C = $(filter %.pb.cc,$(SERVER_SRC:%.proto=%.pb.cc) $(SERVER_SRC:%.proto=%.grpc.pb.cc))

@@ -6,11 +6,13 @@
 #include <mutex>
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
+#include <boost/program_options.hpp>
 extern "C" {
 #include <libavdevice/avdevice.h>
 #include <libswscale/swscale.h>
 }
 
+#include "AddressPortPair.h"
 #include "FfmpegDemuxer.h"
 #include "FfmpegMuxer.h"
 #include "FfmpegOutput.h"
@@ -19,6 +21,9 @@ extern "C" {
 #include "ProtobufStream.h"
 #include "messages.pb.h"
 #include "Logger.h"
+#include "Util.h"
+
+namespace po = boost::program_options;
 
 class ProtobufOutput : public FfmpegOutput {
 public:
@@ -57,15 +62,6 @@ private:
     uint8_t* buffer;
     AVIOContext* avio_context;
 };
-
-boost::asio::ip::tcp::socket connect_socket(std::shared_ptr<boost::asio::io_service> io_service,
-                                            const std::string& address,
-                                            uint16_t port) {
-    boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(address), port);
-    boost::asio::ip::tcp::socket socket(*io_service);
-    socket.connect(endpoint);
-    return socket;
-}
 
 class Connection {
 public:
@@ -147,33 +143,36 @@ void usage(const char* program) {
 }
 
 int main(int argc, char** argv) {
-    std::string address;
-    uint16_t port;
+    po::options_description description("dt-streamer client");
+    po::positional_options_description positional_description;
+    description.add_options()
+        ("help", "Show this help")
+        ("server", po::value<AddressPortPair>(), "Address of the dt-streamer server")
+    ;
+    positional_description.add("server", 1);
 
-    // Parse the arguments
-    if (argc != 3) {
-        usage(argv[0]);
+    po::variables_map args;
+    po::store(po::command_line_parser(argc, argv)
+              .options(description)
+              .positional(positional_description)
+              .run(),
+              args);
+    po::notify(args);
+
+
+    if (args.count("help") || !args.count("server")) {
+        std::cout << description << std::endl;
         return 1;
     }
-    try {
-        address = argv[1];
-        int port_int = std::stoi(argv[2]);
-        if (port_int < 1 || port_int > 65535) throw std::out_of_range("Port out of range");
-        port = port_int;
-    } catch (std::invalid_argument& e) {
-        usage(argv[0]);
-        return 1;
-    } catch (std::out_of_range& e) {
-        usage(argv[0]);
-        return 1;
-    }
+
+    const AddressPortPair server = args["server"].as<AddressPortPair>();
 
     // Register all devices for ffmpeg, especially x11grab
     avdevice_register_all();
 
     auto io_service = std::make_shared<boost::asio::io_service>();
 
-    Connection connection(io_service, address, port);
+    Connection connection(io_service, server.address, server.port);
 
     io_service->run();
 }
