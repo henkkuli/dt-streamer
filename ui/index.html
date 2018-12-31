@@ -56,6 +56,11 @@ window.onload = function() {
         }
     });
 
+    socket.on('log', function(message) {
+        const log = document.getElementById('log');
+        log.textContent = message + '\n' + log.textContent;
+    });
+
     function requestUpdate() {
         socket.emit('requestUpdate');
         setTimeout(requestUpdate, 1000);
@@ -66,6 +71,14 @@ window.onload = function() {
         <style>
 .connected {
     background-color: red;
+}
+#log {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 25%;
+    overflow-y: scroll;
 }
         </style>
     </head>
@@ -78,5 +91,6 @@ window.onload = function() {
 
             </tbody>
         </table>
+        <pre id="log"></pre>
     </body>
 </html>

@@ -35,19 +35,27 @@ app.get('/', function(req, res) {
 
 io.on('connection', function(socket) {
     async function updateAll() {
-        let [{sources}, {sinks}] = await Promise.all([
-            client.ListSources().sendMessage({}),
-            client.listSinks().sendMessage({}),
-        ]);
-        socket.emit('update', {sources, sinks});
+        try {
+            let [{sources}, {sinks}] = await Promise.all([
+                client.ListSources().sendMessage({}),
+                client.listSinks().sendMessage({}),
+            ]);
+            socket.emit('update', {sources, sinks});
+        } catch (e) {
+            socket.emit('log', e.toString());
+        }
     }
 
     updateAll();
 
     socket.on('requestUpdate', updateAll);
 
-    socket.on('route', function({source, sink}) {
+    socket.on('route', async function({source, sink}) {
         console.log(arguments)
-        client.ConnectSourceToSink().sendMessage({source, sink});
+        try {
+            await client.ConnectSourceToSink().sendMessage({source, sink});
+        } catch (e) {
+            socket.emit('log', e.toString());
+        }
     });
 });
