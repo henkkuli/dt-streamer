@@ -1,42 +1,41 @@
 #pragma once
-#include <chrono>
-#include <iomanip>
-#include <iostream>
+
 #include <mutex>
-#include <thread>
+#include <sstream>
+
+// Log levels. When changin these, remember to change log level names in Logger.cpp
+enum log_level {
+    ERROR = 0,
+    WARN,
+    NOTICE,
+    INFO,
+    DEBUG
+};
 
 class LogTemporary {
 public:
-    LogTemporary() : lock(log_mutex) {
-        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        std::cout << "[" << std::put_time(std::gmtime(&now), "%F %T")
-                  << " @ " << std::this_thread::get_id() << "] ";
-    }
-    LogTemporary(LogTemporary&& tmp) : lock(std::move(tmp.lock)) {
-    }
-    ~LogTemporary() {
-        std::cout << std::endl;
-    }
+    LogTemporary(log_level level, const char* file, unsigned li);
+    LogTemporary(LogTemporary&&) = default;
+
+    ~LogTemporary();
 
     template<typename T>
     LogTemporary& operator<<(T value) {
-        std::cout << value;
+        stream << value;
         return *this;
     }
 
 private:
     static std::mutex log_mutex;
-    std::unique_lock<std::mutex> lock;
+    std::stringstream stream;
+    bool enabled;
 };
 
-class Log {
-public:
-    template<typename T>
-    LogTemporary operator<<(T value) {
-        LogTemporary tmp;
-        tmp << value;
-        return tmp;
-    }
-};
+#define LOG(level) log_internal(level, __FILE__, __LINE__)
+LogTemporary log_internal(log_level level, const char* file, unsigned line);
 
-extern Log tlog;
+void set_log_level(log_level level);
+void set_log_level(std::string level);
+
+// Legacy logging
+#define tlog LOG(INFO)

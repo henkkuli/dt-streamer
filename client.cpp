@@ -147,6 +147,8 @@ int main(int argc, char** argv) {
     po::positional_options_description positional_description;
     description.add_options()
         ("help", "Show this help")
+        ("log-level", po::value<std::string>()->default_value("INFO"),
+         "Logging level. ERROR, WARNING, NOTICE, INFO, DEBUG.")
         ("server", po::value<AddressPortPair>(), "Address of the dt-streamer server")
     ;
     positional_description.add("server", 1);
@@ -161,6 +163,14 @@ int main(int argc, char** argv) {
 
 
     if (args.count("help") || !args.count("server")) {
+        std::cout << description << std::endl;
+        return 1;
+    }
+
+    try {
+        set_log_level(args["log-level"].as<std::string>());
+    } catch (std::invalid_argument& e) {
+        std::cout << "Invalid log level" << std::endl;
         std::cout << description << std::endl;
         return 1;
     }

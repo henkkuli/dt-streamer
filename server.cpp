@@ -470,6 +470,8 @@ int main(int argc, char** argv) {
     description.add_options()
         ("help", "Show this help")
         ("threads", po::value<unsigned>()->default_value(1), "Number of threads for IO, excluding RPC")
+        ("log-level", po::value<std::string>()->default_value("INFO"),
+         "Logging level. ERROR, WARNING, NOTICE, INFO, DEBUG.")
         ("control-port", po::value<uint16_t>()->notifier(&checkPort)->default_value(6000), "Port for RPC connection")
         ("data-port", po::value<uint16_t>()->notifier(&checkPort)->default_value(5000), "Port for streaming clients")
         ("sink", po::value<std::vector<AddressPortPair>>(), "Address of a sink")
@@ -485,6 +487,14 @@ int main(int argc, char** argv) {
     po::notify(args);
 
     if (args.count("help") || !args.count("sink")) {
+        std::cout << description << std::endl;
+        return 1;
+    }
+
+    try {
+        set_log_level(args["log-level"].as<std::string>());
+    } catch (std::invalid_argument& e) {
+        std::cout << "Invalid log level" << std::endl;
         std::cout << description << std::endl;
         return 1;
     }

@@ -13,7 +13,7 @@ PROTOFLAGS = -I./ --cpp_out=./ --grpc_out=./ --plugin=protoc-gen-grpc=`which grp
 # Common linking options
 LDFLAGS =
 LDLIBS = -lavformat -lavcodec -lavutil -lavdevice -lswscale -lpthread -lboost_system -lboost_coroutine -lprotobuf
-LDLIBS += -lboost_program_options
+LDLIBS += -lboost_program_options -lboost_date_time
 
 # Target specific linking options
 SERVER_LIBS = -lgrpc++
