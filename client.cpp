@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -22,6 +23,9 @@ extern "C" {
 #include "messages.pb.h"
 #include "Logger.h"
 #include "Util.h"
+
+// This must be here because it redefines Status, which breaks protobuf
+#include <X11/Xlib.h>
 
 namespace po = boost::program_options;
 
@@ -65,7 +69,8 @@ private:
 
 class Connection {
 public:
-    Connection(std::shared_ptr<boost::asio::io_service> _io_service, const std::string& address, uint16_t port) :
+    Connection(std::shared_ptr<boost::asio::io_service> _io_service, const std::string& address, uint16_t port,
+               int width, int height) :
                io_service(_io_service),
                work(*io_service),
                stream(connect_socket(io_service, address, port), boost::bind(&Connection::HandleMessage, this,
@@ -78,12 +83,12 @@ public:
         muxer->WriteHeaders();
 
         // Create screen capture input
-        demuxer = std::make_unique<FfmpegDemuxer>(av_find_input_format("x11grab"), ":0.0");
+        demuxer = std::make_unique<FfmpegX11grabDemuxer>(std::getenv("DISPLAY"), width, height);
         decoder = demuxer->FindVideoStream();
         decoder->OnFrame(boost::bind(&Connection::OnFrame, this, boost::placeholders::_1));
 
         // Scaler
-        scaling_context = sws_getContext(1920, 1080, AV_PIX_FMT_BGR0, 1920, 1080, AV_PIX_FMT_YUV420P, 0,
+        scaling_context = sws_getContext(width, height, AV_PIX_FMT_BGR0, 1920, 1080, AV_PIX_FMT_YUV420P, 0,
                                          nullptr, nullptr, nullptr);
 
         // Start decoding
@@ -176,15 +181,24 @@ int main(int argc, char** argv) {
     }
 
     const AddressPortPair server = args["server"].as<AddressPortPair>();
-    
+
     av_log_set_callback(ffmpeg_log_callback);
+
+    // Let's connect to X to get the screen size
+    Display* display = XOpenDisplay(nullptr);       // Use the default display from DISPLAY environment variable
+
+    int width = XDisplayWidth(display, 0);
+    int height = XDisplayHeight(display, 0);
+    LOG(INFO) << "Display size is " << width << "x" << height;
+
+    XCloseDisplay(display);
 
     // Register all devices for ffmpeg, especially x11grab
     avdevice_register_all();
 
     auto io_service = std::make_shared<boost::asio::io_service>();
 
-    Connection connection(io_service, server.address, server.port);
+    Connection connection(io_service, server.address, server.port, width, height);
 
     io_service->run();
 }

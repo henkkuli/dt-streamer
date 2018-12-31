@@ -21,16 +21,6 @@ public:
         THROW_ON_AV_ERROR(avformat_open_input(&format_context, nullptr, input_format, nullptr));
     }
 
-    FfmpegDemuxer(AVInputFormat* input_format, const std::string& filename) : input(nullptr) {
-        format_context = nullptr;
-
-        AVDictionary* options = nullptr;
-        av_dict_set(&options, "video_size", "1920x1080", 0);
-        av_dict_set_int(&options, "framerate", 60, 0);
-
-        THROW_ON_AV_ERROR(avformat_open_input(&format_context, filename.c_str(), input_format, &options));
-    }
-
     FfmpegVideoDecoder* FindVideoStream() {
         if (!format_info_decoded) {
             int error_number = avformat_find_stream_info(format_context, nullptr);
@@ -63,10 +53,26 @@ public:
         }
     }
 
-private:
-
+protected:
     AVFormatContext* format_context;
     std::unique_ptr<FfmpegInput> input;
     FfmpegVideoDecoder* video_decoder;
     bool format_info_decoded = false;
+
+    FfmpegDemuxer() {}
+};
+
+class FfmpegX11grabDemuxer : public FfmpegDemuxer {
+public:
+    FfmpegX11grabDemuxer(const std::string& filename, int width, int height) {
+        format_context = nullptr;
+
+        AVDictionary* options = nullptr;
+        std::string video_size = std::to_string(width) + "x" + std::to_string(height);
+        av_dict_set(&options, "video_size", video_size.c_str(), 0);
+        av_dict_set_int(&options, "framerate", 60, 0);
+
+        auto input_format = av_find_input_format("x11grab");
+        THROW_ON_AV_ERROR(avformat_open_input(&format_context, filename.c_str(), input_format, &options));
+    }
 };

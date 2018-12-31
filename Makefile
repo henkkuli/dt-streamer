@@ -17,7 +17,7 @@ LDLIBS += -lboost_program_options -lboost_date_time
 
 # Target specific linking options
 SERVER_LIBS = -lgrpc++
-CLIENT_LIBS =
+CLIENT_LIBS = -lX11
 
 # List the compiled sources for each executable
 SERVER_SRC = server.cpp AddressPortPair.cpp Util.cpp Logger.cpp control.proto messages.proto
