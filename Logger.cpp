@@ -6,6 +6,10 @@
 #include <iomanip>
 #include <iostream>
 #include <thread>
+#include <vector>
+extern "C" {
+#include <libavutil/avutil.h>
+}
 
 static const std::string log_level_names[] = {
     "ERROR  ",
@@ -42,7 +46,8 @@ LogTemporary::LogTemporary(log_level level, const char* file, unsigned line) : e
     stream << log_level_color_codes[level] << log_level_names[level] << DEFAULT_COLOR << " ";
     stream << "@ 0x" << std::hex << std::setw(2 * sizeof(thread_id))
            << std::setfill('0') << thread_id << std::setfill(' ') << std::dec << " ";
-    stream << file << ":" << line;
+    stream << file;
+    if (line > 0) stream << ":" << line;
     stream << "] ";
                   
 }
@@ -81,4 +86,28 @@ void set_log_level(std::string level) {
     else if (log_level_compare(level, "info")) set_log_level(INFO);
     else if (log_level_compare(level, "debug")) set_log_level(DEBUG);
     else throw std::invalid_argument("level");
+}
+
+void ffmpeg_log_callback(void* ptr, int level, const char* format, va_list vl) {
+    AVClass* avc= ptr ? *(AVClass**)ptr : nullptr;
+
+    // Copy the argument list
+    va_list vl2;
+    va_copy(vl2, vl);
+
+    // Format the string into a temporary vector
+    int log_size = std::vsnprintf(nullptr, 0, format, vl);
+    std::vector<char> log_buffer(log_size + 1);
+    std::vsnprintf(log_buffer.data(), log_size, format, vl2);
+    va_end(vl);
+    va_end(vl2);
+
+    // Find out the component name
+    const char* file = avc ? avc->item_name(ptr) : "ffmpeg";
+    
+    // Print using appropriate log level
+    if (level <= AV_LOG_ERROR) LogTemporary(ERROR, file, 0) << log_buffer.data();
+    else if (level <= AV_LOG_WARNING) LogTemporary(WARN, file, 0) << log_buffer.data();
+    else if (level <= AV_LOG_INFO) LogTemporary(INFO, file, 0) << log_buffer.data();
+    else LogTemporary(DEBUG, file, 0) << log_buffer.data();
 }

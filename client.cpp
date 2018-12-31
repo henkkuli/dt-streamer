@@ -176,6 +176,8 @@ int main(int argc, char** argv) {
     }
 
     const AddressPortPair server = args["server"].as<AddressPortPair>();
+    
+    av_log_set_callback(ffmpeg_log_callback);
 
     // Register all devices for ffmpeg, especially x11grab
     avdevice_register_all();

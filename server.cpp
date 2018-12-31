@@ -508,8 +508,7 @@ int main(int argc, char** argv) {
     boost::asio::io_service::work work(*io_service);
     auto router = std::make_shared<Router>(io_service, data_port);
 
-    // TODO: Log using the tlog
-    // av_log_set_callback(nullptr);
+    av_log_set_callback(ffmpeg_log_callback);
 
     for (auto target : target_addresses) {
         router->AddSink(target.address, target.port);

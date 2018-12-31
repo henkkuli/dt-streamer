@@ -36,3 +36,5 @@ LogTemporary log_internal(log_level level, const char* file, unsigned line);
 
 void set_log_level(log_level level);
 void set_log_level(std::string level);
+
+void ffmpeg_log_callback(void* ptr, int level, const char* format, va_list vl);
