@@ -36,6 +36,3 @@ LogTemporary log_internal(log_level level, const char* file, unsigned line);
 
 void set_log_level(log_level level);
 void set_log_level(std::string level);
-
-// Legacy logging
-#define tlog LOG(INFO)

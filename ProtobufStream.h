@@ -27,7 +27,7 @@ public:
         boost::asio::write(socket, boost::asio::buffer(write_buffer, message_size + 4), ec);
 
         if (ec) {
-            tlog << "Writing message failed";
+            LOG(NOTICE) << "Writing message failed";
             socket.close();
             on_close();
         }
@@ -56,7 +56,7 @@ private:
     void HandleMessageLength(const boost::system::error_code& ec, std::size_t size) {
         if (ec) {
             // TODO: Something failed, we should probably do something
-            tlog << "Failed to read message length";
+            LOG(NOTICE) << "Failed to read message length";
             socket.close();
             on_close();
             return;
@@ -65,7 +65,6 @@ private:
         uint32_t length;
         std::memcpy(&length, read_buffer.data(), sizeof(length));
         length = ntohl(length);
-        // tlog << "Message length " << length << " " << htonl(length);
 
         AsyncRead(length, boost::bind(&ProtobufStream::HandleMessage, this,
                                       boost::asio::placeholders::error,
@@ -75,7 +74,7 @@ private:
     void HandleMessage(const boost::system::error_code& ec, std::size_t size) {
         if (ec) {
             // TODO: Something failed, we should probably do something
-            tlog << "Failed to read message";
+            LOG(NOTICE) << "Failed to read message";
             socket.close();
             on_close();
             return;;

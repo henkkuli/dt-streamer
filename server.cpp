@@ -150,7 +150,7 @@ public:
 
     void StartStream() {
         io_service->dispatch([&]() {
-            tlog << "Starting";
+            LOG(INFO) << "Starting source " << id;
             ClientControl message;
             message.mutable_start_stream();
             stream.WriteMessage(message);
@@ -159,7 +159,7 @@ public:
 
     void StopStream() {
         io_service->dispatch([&]() {
-            tlog << "Stopping";
+            LOG(INFO) << "Stopping stream " << id;
             ClientControl message;
             message.mutable_stop_stream();
             stream.WriteMessage(message);
@@ -215,7 +215,7 @@ private:
     }
 
     static void DecodeAll(std::shared_ptr<Source> source, boost::asio::yield_context yield) {
-        tlog << "Starting decoding loop";
+        LOG(DEBUG) << "Starting decoding loop";
         // Async input needs a yielder before it can be used
         source->async_input->SetYielder(&yield);
         while (!source->suspended) {
@@ -223,7 +223,7 @@ private:
             // Yield after every group of frames for outher stuff
             source->io_service->post(yield);
         }
-        tlog << "Stopping decoding loop";
+        LOG(DEBUG) << "Stopping decoding loop";
     }
 
     void OnFrame(AVFrame* frame);
@@ -256,8 +256,8 @@ public:
         AVFrame* target = encoder->GetNextFrame();
         THROW_ON_AV_ERROR(av_frame_copy(target, frame));
         target->pts = frame_number++;
-        tlog << target->width << "x" << target->height << " "
-             << frame->width << "x" << frame->height;
+        LOG(DEBUG) << "Received frame with size" << frame->width << "x" << frame->height
+                   << "and sending it scaled to" << target->width << "x" << target->height;
         encoder->SwapFrames();
         encoder->WriteFrame();
     }
@@ -378,12 +378,12 @@ private:
 
     void AcceptConnection(const boost::system::error_code& ec, boost::asio::ip::tcp::socket socket) {
         if (ec) {
-            tlog << "Error accepting a connection: " << ec.message();
+            LOG(ERROR) << "Error accepting a connection: " << ec.message();
             // Try still again
             StartAccepting();
             return;
         }
-        tlog << "Connection accepted";
+        LOG(INFO) << "Connection accepted";
 
         std::scoped_lock lock(sources_mutex);
         uint32_t source_id = next_source_id++;
@@ -410,7 +410,7 @@ public:
 
     grpc::Status ListSources(grpc::ServerContext* context, const ListSourcesRequest* request,
                              ListSourcesResponse* response) override {
-        tlog << "Listing sources";
+        LOG(DEBUG) << "Listing sources";
         for (auto source : router->ListSources()) {
             auto source_proto = response->add_sources();
             source_proto->set_id(source->Id());
@@ -421,7 +421,7 @@ public:
 
     grpc::Status ListSinks(grpc::ServerContext* context, const ListSinksRequest* request,
                              ListSinksResponse* response) override {
-        tlog << "Listing sinks";
+        LOG(DEBUG) << "Listing sinks";
         for (auto sink : router->ListSinks()) {
             auto sink_proto = response->add_sinks();
             sink_proto->set_id(sink->Id());
@@ -435,14 +435,14 @@ public:
 
     grpc::Status ConnectSourceToSink(grpc::ServerContext* context, const ConnectSourceToSinkRequest* request,
                                      ConnectSourceToSinkResponse* response) override {
-        tlog << "Connecting source " << request->source() << " to sink " << request->sink();
+        LOG(DEBUG) << "Connecting source " << request->source() << " to sink " << request->sink();
         router->ConnectSourceToSink(request->source(), request->sink());
         return grpc::Status::OK;
     }
 
     grpc::Status DetachSink(grpc::ServerContext* context, const DetachSinkRequest* request,
                             DetachSinkResponse* response) override {
-        tlog << "Detaching sink " << request->sink();
+        LOG(DEBUG) << "Detaching sink " << request->sink();
         router->DetachSink(request->sink());
         return grpc::Status::OK;
     }
@@ -453,9 +453,9 @@ private:
 
 void WorkerThread(std::shared_ptr<boost::asio::io_service> io_service) {
     while (1) {
-        tlog << "Starting runner";
+        LOG(DEBUG) << "Starting runner";
         io_service->run();
-        tlog << "Stopping runner";
+        LOG(DEBUG) << "Stopping runner";
     }
 }
 

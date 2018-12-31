@@ -103,12 +103,12 @@ private:
     
     void HandleMessage(const ClientControl& message) {
         if (message.has_start_stream()) {
-            tlog << "Starting stream";
+            LOG(INFO) << "Starting stream";
             std::scoped_lock lock(streaming_mutex);
             streaming = true;
         }
         if (message.has_stop_stream()) {
-            tlog << "Stopping stream";
+            LOG(INFO) << "Stopping stream";
             std::scoped_lock lock(streaming_mutex);
             streaming = false;
         }

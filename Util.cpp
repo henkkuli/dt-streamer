@@ -9,20 +9,20 @@ boost::asio::ip::tcp::socket connect_socket(std::shared_ptr<boost::asio::io_serv
 
     bool connected = false;
     for (auto& endpoint : endpoints) {
-        tlog << "Connecting to " << endpoint.endpoint().address() << ":" << endpoint.endpoint().port();
+        LOG(INFO) << "Connecting to " << endpoint.endpoint().address() << ":" << endpoint.endpoint().port();
         boost::system::error_code ec;
         socket.connect(endpoint.endpoint(), ec);
         if (!ec) {
             connected = true;
             break;
         } else {
-            tlog << ec.message();
+            LOG(NOTICE) << ec.message();
             // Reset the socket
             socket = boost::asio::ip::tcp::socket{*io_service};
         }
     }
     if (!connected) {
-        tlog << "Failed to connect " << address << ":" << port;
+        LOG(ERROR) << "Failed to connect " << address << ":" << port;
         // Crash the program...
         // TODO: More elegant error handling
         exit(2);
