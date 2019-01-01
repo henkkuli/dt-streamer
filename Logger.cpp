@@ -17,14 +17,16 @@ static const std::string log_level_names[] = {
     "NOTICE ",
     "INFO   ",
     "DEBUG  ",
+    "TRACE  ",
 };
 
 static const std::string log_level_color_codes[] = {
-    "\x1b[38;5;9m",
-    "\x1b[38;5;1m",
-    "\x1b[38;5;2m",
-    "\x1b[38;5;7m",
-    "\x1b[38;5;3m",
+    "\e[38;5;9m",
+    "\e[38;5;1m",
+    "\e[38;5;2m",
+    "\e[38;5;7m",
+    "\e[38;5;3m",
+    "\e[38;5;5m",
 };
 
 static const std::string DEFAULT_COLOR = "\e[0m";
@@ -96,6 +98,7 @@ void set_log_level(std::string level) {
     else if (log_level_compare(level, "notice")) set_log_level(NOTICE);
     else if (log_level_compare(level, "info")) set_log_level(INFO);
     else if (log_level_compare(level, "debug")) set_log_level(DEBUG);
+    else if (log_level_compare(level, "trace")) set_log_level(TRACE);
     else throw std::invalid_argument("level");
 }
 
@@ -120,5 +123,6 @@ void ffmpeg_log_callback(void* ptr, int level, const char* format, va_list vl) {
     if (level <= AV_LOG_ERROR) LogTemporary(ERROR, file, 0) << log_buffer.data();
     else if (level <= AV_LOG_WARNING) LogTemporary(WARN, file, 0) << log_buffer.data();
     else if (level <= AV_LOG_INFO) LogTemporary(INFO, file, 0) << log_buffer.data();
-    else LogTemporary(DEBUG, file, 0) << log_buffer.data();
+    else if (level <= AV_LOG_DEBUG) LogTemporary(DEBUG, file, 0) << log_buffer.data();
+    else LogTemporary(TRACE, file, 0) << log_buffer.data();
 }

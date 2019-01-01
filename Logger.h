@@ -9,7 +9,8 @@ enum log_level {
     WARN,
     NOTICE,
     INFO,
-    DEBUG
+    DEBUG,
+    TRACE,
 };
 
 class LogTemporary {
