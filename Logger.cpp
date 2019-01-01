@@ -35,7 +35,7 @@ std::mutex LogTemporary::log_mutex;
 LogTemporary::LogTemporary(log_level level, const char* file, unsigned line) : enabled(level <= current_log_level) {
     if (!enabled) return;
 
-    static std::locale locale (std::cout.getloc(), new boost::posix_time::time_facet("%Y-%m-%d %H:%M:%s"));
+    std::locale locale(stream.getloc(), new boost::posix_time::time_facet("%Y-%m-%d %H:%M:%s"));
     stream.imbue(locale);
 
     auto now = boost::posix_time::microsec_clock::local_time();
