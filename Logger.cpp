@@ -32,17 +32,28 @@ static const std::string DEFAULT_COLOR = "\e[0m";
 static std::atomic<log_level> current_log_level;
 std::mutex LogTemporary::log_mutex;
 
+static void output_time(std::ostream& out, const boost::posix_time::ptime& ptime) {
+    auto date = ptime.date();
+    auto time = ptime.time_of_day();
+    out << std::setfill('0');
+    out << std::setw(4) << date.year()
+        << "-" << std::setw(2) << date.month().as_number()
+        << "-" << std::setw(2) << date.day() << " ";
+    out << std::setw(2) << time.hours() << ":"
+        << std::setw(2) << time.minutes() << ":"
+        << std::setw(2) << time.seconds() << "."
+        << std::setw(time.num_fractional_digits()) << time.fractional_seconds();
+}
+
 LogTemporary::LogTemporary(log_level level, const char* file, unsigned line) : enabled(level <= current_log_level) {
     if (!enabled) return;
-
-    std::locale locale(stream.getloc(), new boost::posix_time::time_facet("%Y-%m-%d %H:%M:%s"));
-    stream.imbue(locale);
 
     auto now = boost::posix_time::microsec_clock::local_time();
     auto thread_id = std::this_thread::get_id();
 
     stream << "[";
-    stream << now << " ";
+    output_time(stream, now);
+    stream << " ";
     stream << log_level_color_codes[level] << log_level_names[level] << DEFAULT_COLOR << " ";
     stream << "@ 0x" << std::hex << std::setw(2 * sizeof(thread_id))
            << std::setfill('0') << thread_id << std::setfill(' ') << std::dec << " ";
