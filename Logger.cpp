@@ -103,17 +103,18 @@ void set_log_level(std::string level) {
 }
 
 void ffmpeg_log_callback(void* ptr, int level, const char* format, va_list vl) {
-    AVClass* avc= ptr ? *(AVClass**)ptr : nullptr;
+    AVClass* avc = ptr ? *(AVClass**)ptr : nullptr;
 
     // Copy the argument list
     va_list vl2;
-    va_copy(vl2, vl);
 
     // Format the string into a temporary vector
-    int log_size = std::vsnprintf(nullptr, 0, format, vl);
+    va_copy(vl2, vl);
+    int log_size = std::vsnprintf(nullptr, 0, format, vl2);
+    va_end(vl2);
     std::vector<char> log_buffer(log_size + 1);
+    va_copy(vl2, vl);
     std::vsnprintf(log_buffer.data(), log_size, format, vl2);
-    va_end(vl);
     va_end(vl2);
 
     // Find out the component name
