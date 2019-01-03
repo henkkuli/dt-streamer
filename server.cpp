@@ -132,7 +132,6 @@ public:
            id(_id),
            stream(std::move(_socket), boost::bind(&Source::HandleMessage, this, boost::placeholders::_1), on_close) {
         async_input = std::make_unique<AsyncInput>(io_service);
-        demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("mpegts"), async_input->GetAsyncInput());
 
         // Start decoding in a coroutine
         io_service->post([&]() {
@@ -218,6 +217,7 @@ private:
         LOG(DEBUG) << "Starting decoding loop";
         // Async input needs a yielder before it can be used
         source->async_input->SetYielder(&yield);
+        source->demuxer = std::make_shared<FfmpegDemuxer>(av_find_input_format("mpegts"), source->async_input->GetAsyncInput());
         while (!source->suspended) {
             source->DecodeFrame();
             // Yield after every group of frames for outher stuff
@@ -240,7 +240,7 @@ public:
         muxer = std::make_shared<FfmpegMuxer>(av_guess_format("mpegts", nullptr, nullptr),
                                               std::make_unique<FfmpegNetworkOutput>(std::move(socket)),
                                               /* frame rate */ 30);
-        encoder = FfmpegVideoEncoder::CreateEncoder("libx264", muxer, 1920, 1080);
+        encoder = FfmpegVideoEncoder::CreateEncoder(io_service, "libx264", muxer, 1920, 1080);
         muxer->WriteHeaders();
     }
 

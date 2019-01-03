@@ -1,7 +1,11 @@
 #pragma once
 
+#include <atomic>
+#include <boost/asio.hpp>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <utility>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -13,33 +17,45 @@ extern "C" {
 
 class FfmpegVideoEncoder {
 public:
-    static std::unique_ptr<FfmpegVideoEncoder> CreateEncoder(const std::string& codec_name,
+    static std::unique_ptr<FfmpegVideoEncoder> CreateEncoder(std::shared_ptr<boost::asio::io_service> io_service,
+                                                             const std::string& codec_name,
                                                              std::shared_ptr<FfmpegMuxer> muxer,
                                                              int width, int height, int64_t bit_rate = 10e6) {
-        std::unique_ptr<FfmpegVideoEncoder> encoder(new FfmpegVideoEncoder(codec_name, muxer, width, height, bit_rate));
+        std::unique_ptr<FfmpegVideoEncoder> encoder(new FfmpegVideoEncoder(io_service, codec_name, muxer,
+                                                                           width, height, bit_rate));
         return encoder;
     }
     
     ~FfmpegVideoEncoder() {
         avcodec_close(context);
         avcodec_free_context(&context);
+        LOG(ERROR) << "FfmpegVideoEncoder destructed";
+        exit(3);
     }
 
     AVFrame* GetNextFrame() {
+        std::scoped_lock lock(frame_mutex);
         // TODO: Synchronization
         THROW_ON_AV_ERROR(av_frame_make_writable(background_frame.get()));
         return background_frame.get();
     }
 
     void SwapFrames() {
+        std::scoped_lock lock(frame_mutex);
         // TODO: Synchronization
         std::swap(background_frame, foreground_frame);
     }
 
     void WriteFrame() {
+        if (writing_frame.exchange(true)) return;
+
+        io_service->post(std::bind(&FfmpegVideoEncoder::WriteFrameInternal, this));
+    }
+
+    void WriteFrameInternal() {
+        std::scoped_lock lock(frame_mutex);
         THROW_ON_AV_ERROR(avcodec_send_frame(context, foreground_frame.get()));
 
-        // if (avcodec_send_frame(context, frame) < 0) fail("Failed to send frame");
         while (1) {
             int error_number = avcodec_receive_packet(context, packet.get());
             if (error_number == AVERROR(EAGAIN) || error_number == AVERROR_EOF) break;
@@ -51,6 +67,8 @@ public:
 
             muxer->WritePacket(packet.get());
         }
+
+        writing_frame = false;
     }
 
     int GetWidth() {
@@ -62,8 +80,9 @@ public:
     }
 
 private:
-    FfmpegVideoEncoder(const std::string& codec_name, std::shared_ptr<FfmpegMuxer> _muxer, int width, int height,
-                       int64_t bit_rate) : muxer(std::move(_muxer)) {
+    FfmpegVideoEncoder(std::shared_ptr<boost::asio::io_service> _io_service, const std::string& codec_name,
+                        std::shared_ptr<FfmpegMuxer> _muxer, int width, int height, int64_t bit_rate) :
+                        io_service(_io_service), muxer(std::move(_muxer)) {
         codec = avcodec_find_encoder_by_name(codec_name.c_str());
         if (!codec) THROW_FFMPEG("Codec " + codec_name + " not found");
 
@@ -108,10 +127,13 @@ private:
         });
     }
 
+    std::shared_ptr<boost::asio::io_service> io_service;
     std::shared_ptr<FfmpegMuxer> muxer;
     AVCodec* codec;
     AVCodecContext* context;
     AVStream* stream;
+    std::mutex frame_mutex;
+    std::atomic<bool> writing_frame;
     std::unique_ptr<AVFrame, std::function<void(AVFrame*)>> foreground_frame;
     std::unique_ptr<AVFrame, std::function<void(AVFrame*)>> background_frame;
     std::unique_ptr<AVPacket, std::function<void(AVPacket*)>> packet;

@@ -79,7 +79,7 @@ public:
         // Create video output
         auto output = std::make_unique<ProtobufOutput>(&stream);
         auto muxer = std::make_shared<FfmpegMuxer>(av_guess_format("mpegts", nullptr, nullptr), std::move(output), 30);
-        encoder = FfmpegVideoEncoder::CreateEncoder("libx264", muxer, 1920, 1080);
+        encoder = FfmpegVideoEncoder::CreateEncoder(io_service, "libx264", muxer, 1920, 1080);
         muxer->WriteHeaders();
 
         // Create screen capture input
