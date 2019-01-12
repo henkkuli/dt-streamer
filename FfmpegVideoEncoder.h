@@ -29,8 +29,6 @@ public:
     ~FfmpegVideoEncoder() {
         avcodec_close(context);
         avcodec_free_context(&context);
-        LOG(ERROR) << "FfmpegVideoEncoder destructed";
-        exit(3);
     }
 
     AVFrame* GetNextFrame() {
