@@ -124,6 +124,6 @@ void ffmpeg_log_callback(void* ptr, int level, const char* format, va_list vl) {
     if (level <= AV_LOG_ERROR) LogTemporary(ERROR, file, 0) << log_buffer.data();
     else if (level <= AV_LOG_WARNING) LogTemporary(WARN, file, 0) << log_buffer.data();
     else if (level <= AV_LOG_INFO) LogTemporary(INFO, file, 0) << log_buffer.data();
-    else if (level <= AV_LOG_DEBUG) LogTemporary(DEBUG, file, 0) << log_buffer.data();
+    else if (level <= AV_LOG_VERBOSE) LogTemporary(DEBUG, file, 0) << log_buffer.data();
     else LogTemporary(TRACE, file, 0) << log_buffer.data();
 }
