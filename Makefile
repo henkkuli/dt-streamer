@@ -42,10 +42,10 @@ CLIENT_OBJS = $(filter %.o,$(CLIENT_SRC:%.cpp=%.o)) $(CLIENT_PROTO_C:%.cc=%.o)
 -include $(patsubst %.o,%.d,$(SERVER_OBJS) $(CLIENT_OBJS))
 
 server: $(SERVER_OBJS)
-	$(CXX) $(LDFLAGS) $(LDLIBS) $(SERVER_LIBS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS) $(SERVER_LIBS)
 
 client: $(CLIENT_OBJS)
-	$(CXX) $(LDFLAGS) $(LDLIBS) $(CLIENT_LIBS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS) $(CLIENT_LIBS)
 
 # Automatic compilation for c++ files
 %.o: %.cpp
