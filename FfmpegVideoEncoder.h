@@ -20,7 +20,7 @@ public:
     static std::unique_ptr<FfmpegVideoEncoder> CreateEncoder(std::shared_ptr<boost::asio::io_service> io_service,
                                                              const std::string& codec_name,
                                                              std::shared_ptr<FfmpegMuxer> muxer,
-                                                             int width, int height, int64_t bit_rate = 10e6) {
+                                                             int width, int height, int64_t bit_rate = 100e6) {
         std::unique_ptr<FfmpegVideoEncoder> encoder(new FfmpegVideoEncoder(io_service, codec_name, muxer,
                                                                            width, height, bit_rate));
         return encoder;
@@ -99,7 +99,11 @@ private:
         context->pix_fmt = AV_PIX_FMT_YUV420P;
         context->thread_count = 1;
 
-        THROW_ON_AV_ERROR(avcodec_open2(context, codec, nullptr));
+        AVDictionary *options = nullptr;
+        av_dict_set(&options, "crf", "20", 0);
+        av_dict_set(&options, "preset", "ultrafast", 0);
+        THROW_ON_AV_ERROR(avcodec_open2(context, codec, &options));
+        av_dict_free(&options);
 
         foreground_frame = AllocateFrame();
         background_frame = AllocateFrame();
