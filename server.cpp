@@ -276,8 +276,7 @@ public:
         AVFrame* target = encoder->GetNextFrame();
         THROW_ON_AV_ERROR(av_frame_copy(target, frame));
         target->pts = frame_number++;
-        LOG(DEBUG) << "Received frame with size " << frame->width << "x" << frame->height
-                   << " and sending it scaled to " << target->width << "x" << target->height;
+        LOG(DEBUG) << "Sending frame " << target->pts << " to sink " << id;
         encoder->SwapFrames();
         encoder->WriteFrame();
     }
