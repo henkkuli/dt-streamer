@@ -14,5 +14,17 @@ message ClientControl {
 }
 
 message ClientData {
-  bytes payload = 1;
+  message Hello {
+    string hostname = 1;
+    string username = 2;
+  }
+  message Data {
+    bytes payload = 1;
+  }
+
+  oneof type {
+    Hello hello = 1;
+    Data data = 2;
+  };
 }
+

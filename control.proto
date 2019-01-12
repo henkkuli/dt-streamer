@@ -5,7 +5,9 @@ message ListSourcesRequest {
 message ListSourcesResponse {
     message Source {
         uint32 id = 1;
-        string name = 2;
+        string address = 2;
+        string hostname = 3;
+        string username = 4;
     }
     repeated Source sources = 1;
 }

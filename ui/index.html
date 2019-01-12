@@ -35,7 +35,7 @@ window.onload = function() {
             body.appendChild(row);
             let column = document.createElement('td');
             row.appendChild(column);
-            column.append(source.name);
+            column.append(`${source.username}@${source.hostname}`);
 
             for (let sink of sinks) {
                 column = document.createElement('td');

@@ -169,9 +169,18 @@ public:
 
     void DetachFrom(Sink* sink);
 
-    std::string Name() const {
-        // TODO: Find a real name instead of address
+    std::string Address() const {
         return address;
+    }
+
+    std::string Hostname() const {
+        std::scoped_lock lock(hostname_mutex);
+        return hostname;
+    }
+
+    std::string Username() const {
+        std::scoped_lock lock(username_mutex);
+        return username;
     }
 
     uint32_t Id() const {
@@ -188,6 +197,10 @@ private:
     std::shared_ptr<boost::asio::io_service> io_service;
     boost::asio::io_service::work work;
     const std::string address;
+    mutable std::mutex hostname_mutex;
+    std::string hostname;
+    mutable std::mutex username_mutex;
+    std::string username;
     const uint32_t id;
     const uint32_t reserved[3] = {0};       // TODO: Find out why this is needed
     ProtobufStream<ClientData, ClientControl> stream;
@@ -199,7 +212,14 @@ private:
     std::atomic<bool> suspended = false;
 
     void HandleMessage(const ClientData& message) {
-        async_input->SendData(message.payload());
+        if (message.has_hello()) {
+            auto& hello_message = message.hello();
+            std::scoped_lock lock(hostname_mutex, username_mutex);
+            hostname = hello_message.hostname();
+            username = hello_message.username();
+        } else if (message.has_data()) {
+            async_input->SendData(message.data().payload());
+        }
     }
 
     void DecodeFrame() {
@@ -414,7 +434,9 @@ public:
         for (auto source : router->ListSources()) {
             auto source_proto = response->add_sources();
             source_proto->set_id(source->Id());
-            source_proto->set_name(source->Name());
+            source_proto->set_address(source->Address());
+            source_proto->set_hostname(source->Hostname());
+            source_proto->set_username(source->Username());
         }
         return grpc::Status::OK;
     }

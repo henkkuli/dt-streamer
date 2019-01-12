@@ -12,6 +12,7 @@ extern "C" {
 #include <libavdevice/avdevice.h>
 #include <libswscale/swscale.h>
 }
+#include "pwd.h"
 
 #include "AddressPortPair.h"
 #include "FfmpegDemuxer.h"
@@ -56,9 +57,10 @@ public:
 private:
     static int WriteData(void* opaque, uint8_t* buffer, int buffer_size) {
         ProtobufOutput& output = *reinterpret_cast<ProtobufOutput*>(opaque);
-        ClientData data;
-        data.mutable_payload()->assign(reinterpret_cast<char*>(buffer), buffer_size);
-        output.stream->WriteMessage(data);
+        ClientData message;
+        auto data = message.mutable_data();
+        data->mutable_payload()->assign(reinterpret_cast<char*>(buffer), buffer_size);
+        output.stream->WriteMessage(message);
         return 0;
     }
 
@@ -66,6 +68,22 @@ private:
     uint8_t* buffer;
     AVIOContext* avio_context;
 };
+
+std::string get_hostname() {
+    char hostname[HOST_NAME_MAX + 1];
+    gethostname(hostname, HOST_NAME_MAX + 1);
+    hostname[HOST_NAME_MAX] = '\0';
+    std::string name = hostname;
+    return name;
+}
+
+std::string get_username() {
+    uid_t uid = getuid();
+    passwd* pw = getpwuid(uid);
+    if (!pw) return "<unknown>";
+    std::string username = pw->pw_name;
+    return username;
+}
 
 class Connection {
 public:
@@ -93,6 +111,13 @@ public:
 
         // Start decoding
         DecodeFrame();
+
+        // Send hello message
+        ClientData hello_message;
+        auto hello = hello_message.mutable_hello();
+        hello->set_hostname(get_hostname());
+        hello->set_username(get_username());
+        stream.WriteMessage(hello_message);
     }
 
 private:
