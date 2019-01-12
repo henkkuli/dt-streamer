@@ -7,7 +7,7 @@
 window.onload = function() {
     const socket = io.connect('///');
 
-    socket.on('update', function({sources, sinks}) {
+    socket.on('update', function({sources, sinks, userMapping}) {
         const matrix = document.getElementById('matrix');
         const head = matrix.getElementsByTagName('thead')[0];
         const body = matrix.getElementsByTagName('tbody')[0];
@@ -35,7 +35,7 @@ window.onload = function() {
             body.appendChild(row);
             let column = document.createElement('td');
             row.appendChild(column);
-            column.append(`${source.username}@${source.hostname}`);
+            column.append(`${source.username}@${source.hostname} (${userMapping[source.username]})`);
 
             for (let sink of sinks) {
                 column = document.createElement('td');

@@ -5,6 +5,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io')
 const grpc_promise = require('grpc-promise');
+const fs = require('fs');
 
 // Load RPC definition
 const PROTO_PATH = path.join(__dirname, '../control.proto');
@@ -33,6 +34,18 @@ app.get('/', function(req, res) {
     res.sendFile(path.join(__dirname, './index.html'));
 });
 
+function loadUserMapping() {
+    const mapping = {};
+    const raw_data = fs.readFileSync(path.join(__dirname, 'user-name-map.csv'), 'utf8');
+    const lines = raw_data.split(/\n\r?/);
+    for (let line of lines) {
+        let [firstname, lastname, username] = line.split(',');
+        mapping[username] = `${firstname} ${lastname}`;
+    }
+    return mapping;
+}
+let userMapping = loadUserMapping();
+
 io.on('connection', function(socket) {
     async function updateAll() {
         try {
@@ -40,7 +53,7 @@ io.on('connection', function(socket) {
                 client.ListSources().sendMessage({}),
                 client.listSinks().sendMessage({}),
             ]);
-            socket.emit('update', {sources, sinks});
+            socket.emit('update', {sources, sinks, userMapping});
         } catch (e) {
             socket.emit('log', e.toString());
         }
