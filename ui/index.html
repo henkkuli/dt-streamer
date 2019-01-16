@@ -50,7 +50,7 @@ window.onload = function() {
                 }
 
                 button.addEventListener('click', function() {
-                    socket.emit('route', {source: source.id, sink: sink.id});
+                    socket.emit('route', {source: source.id, sink: sink.id, username: userMapping[source.username]});
                 });
             }
         }

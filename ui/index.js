@@ -7,6 +7,8 @@ const socketIo = require('socket.io')
 const grpc_promise = require('grpc-promise');
 const fs = require('fs');
 
+const OBS_USERNAMES = path.join(__dirname, 'obs');
+
 // Load RPC definition
 const PROTO_PATH = path.join(__dirname, '../control.proto');
 const packageDefinition = protoLoader.loadSync(
@@ -63,10 +65,11 @@ io.on('connection', function(socket) {
 
     socket.on('requestUpdate', updateAll);
 
-    socket.on('route', async function({source, sink}) {
+    socket.on('route', async function({source, sink, username}) {
         console.log(arguments)
         try {
             await client.ConnectSourceToSink().sendMessage({source, sink});
+            fs.writeFileSync(path.join(OBS_USERNAMES, `${sink}.txt`), username, 'utf8');
         } catch (e) {
             socket.emit('log', e.toString());
         }
